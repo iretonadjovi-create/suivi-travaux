@@ -80,7 +80,7 @@ h1{font:700 clamp(28px,6vw,38px)/1.05 var(--font-display);letter-spacing:-.02em;
 .seg button{border:0;background:none;padding:9px 14px;border-radius:9px;font-weight:700;font-size:14px;color:var(--muted);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .tblwrap{overflow-x:auto;margin-top:6px;border:1px solid var(--line);border-radius:12px}
-.tbl{width:100%;min-width:700px;border-collapse:collapse;font-size:14px}
+.tbl{width:100%;min-width:760px;border-collapse:collapse;font-size:14px}
 .tbl th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:11px 12px;background:var(--surface2);border-bottom:2px solid var(--line);white-space:nowrap}
 .tbl td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
 .tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -213,6 +213,16 @@ span.nm{cursor:default}
 .gate p{margin:6px 0 0;color:var(--muted)}
 .gate .btn{width:100%;margin-top:18px}
 .me{font-size:13px}
+.btn-proof{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;border:1.5px dashed var(--muted);border-radius:12px;background:var(--surface2);color:var(--ink);font-weight:700;font-size:15px;cursor:pointer}
+.btn-proof svg{width:22px;height:22px}
+.proof{display:flex;gap:14px;align-items:center}
+.proof img{width:84px;height:112px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex:none;background:var(--surface2)}
+.proof .pa{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.proof .ok{font-weight:700;color:var(--in);font-size:14px}
+.ib.recu{color:var(--in)}
+.norecu{display:inline-block;font-size:12px;color:var(--muted);padding:9px 4px}
+.receipt-big{display:block;width:100%;max-width:520px;margin:16px auto 0;border-radius:12px;border:1px solid var(--line)}
+.rmeta{margin:6px 0 0;color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -280,6 +290,8 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 const ICON={
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  recu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
   bin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3"/></svg>'
 };
 
@@ -354,6 +366,38 @@ async function rpc(fn,args){
   if(d&&d.erreur){const x=new Error(d.erreur);x.code=d.erreur;throw x;}
   return d;
 }
+/* Preuves d'achat : la photo est gardée dans une table à part (suivi_preuves), la ligne de dépense
+   ne garde que la date de la photo dans « preuve ». Ainsi la liste reste légère. */
+const preuveCache={};
+async function loadPreuve(r){
+  const k=r.id+'|'+r.preuve;
+  if(preuveCache[k])return preuveCache[k];
+  const d=await rpc('suivi_preuve_lire',{p_ligne:r.id});
+  if(!d||!d.data)throw Object.assign(new Error('absente'),{code:'absente'});
+  return preuveCache[k]=d.data;
+}
+function photoToData(file){
+  return new Promise((ok,ko)=>{
+    const u=URL.createObjectURL(file);const im=new Image();
+    im.onload=()=>{
+      const k=Math.min(1,1400/Math.max(im.width,im.height));const c=document.createElement('canvas');
+      c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',0.72));
+    };
+    im.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('photo'));};
+    im.src=u;
+  });
+}
+function openRecu(r){
+  openSheet(sheetHead('Preuve d’achat')+
+    '<p class="rmeta">'+esc(r.article||r.categorie||'')+(r.payeA?', '+esc(r.payeA):'')+', le '+esc(fmtDate(r.date))+'</p>'+
+    '<p class="rmeta"><b>'+money(r.montant)+'</b></p>'+
+    '<div id="recu-img"><p class="rmeta">Chargement de la photo…</p></div>'+
+    '<div class="actions"><button class="btn btn-quiet" type="button" data-act="close">Fermer</button></div>');
+  loadPreuve(r).then(src=>{const h=$('#recu-img');if(h)h.innerHTML='<img class="receipt-big" src="'+src+'" alt="Photo du reçu">';})
+    .catch(()=>{const h=$('#recu-img');if(h)h.innerHTML='<p class="err">La photo n’a pas pu être chargée. Vérifiez la connexion et réessayez.</p>';});
+}
+
 function applyLocal(coll,id,data){
   const a=arrFor(coll);const i=a.findIndex(x=>x.id===id);
   if(data==null){if(i>=0)a.splice(i,1);}
@@ -379,7 +423,7 @@ function failMsg(e){
   if(c==='invalid_argument'){canWrite=false;render();return "Vous pouvez consulter le fichier, mais pas le modifier.";}
   if(c==='code_invalide'){showGate('code','Le code d’accès a changé. Entrez le nouveau code.');return "Le code d’accès a changé.";}
   if(c==='trop_essais')return "Trop d’essais de code. Réessayez dans 15 minutes.";
-  if(c==='trop_gros')return "Ce texte est trop long. Raccourcissez la note.";
+  if(c==='trop_gros')return "Ce texte ou cette photo est trop lourd. Raccourcissez la note ou reprenez la photo.";
   if(c==='quota_exceeded')return "Le fichier est plein. Prévenez la personne qui l'a créé.";
   return "L'enregistrement a échoué. Vérifiez la connexion et réessayez.";
 }
@@ -614,9 +658,10 @@ function moreBtn(total,shown){
 }
 function depTable(rows,shown){
   if(!rows.length)return '';
-  return '<div class="tblwrap"><table class="tbl zebra"><thead><tr><th>Date</th><th>Type</th><th>Catégorie</th><th>Article ou métier</th><th>Payé à</th><th class="num">Montant (FCFA)</th><th>Saisi par</th><th class="act"></th></tr></thead><tbody>'+
-    shown.map(r=>'<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.type||'')+'</td><td>'+esc(r.categorie||'')+'</td><td>'+esc(r.article||'')+(r.note?'<small>'+esc(r.note)+'</small>':'')+'</td><td>'+esc(r.payeA||'')+'</td><td class="num out">'+fmt(r.montant)+'</td><td>'+esc(nameOf(r.par))+'</td>'+editCell('edit-dep',r.id)+'</tr>').join('')+
-    '</tbody><tfoot><tr><td colspan="5">Total</td><td class="num">'+fmt(sum(rows))+'</td><td colspan="2"></td></tr></tfoot></table></div>';
+  return '<div class="tblwrap"><table class="tbl zebra"><thead><tr><th>Date</th><th>Type</th><th>Catégorie</th><th>Article ou métier</th><th>Payé à</th><th class="num">Montant (FCFA)</th><th>Saisi par</th><th>Reçu</th><th class="act"></th></tr></thead><tbody>'+
+    shown.map(r=>'<tr><td>'+esc(fmtDate(r.date))+'</td><td>'+esc(r.type||'')+'</td><td>'+esc(r.categorie||'')+'</td><td>'+esc(r.article||'')+(r.note?'<small>'+esc(r.note)+'</small>':'')+'</td><td>'+esc(r.payeA||'')+'</td><td class="num out">'+fmt(r.montant)+'</td><td>'+esc(nameOf(r.par))+'</td>'+
+      '<td>'+(r.preuve?'<button class="ib recu" type="button" data-act="recu" data-id="'+esc(r.id)+'" aria-label="Voir le reçu">'+ICON.recu+'</button>':'<span class="norecu">aucun</span>')+'</td>'+editCell('edit-dep',r.id)+'</tr>').join('')+
+    '</tbody><tfoot><tr><td colspan="5">Total</td><td class="num">'+fmt(sum(rows))+'</td><td colspan="3"></td></tr></tfoot></table></div>';
 }
 function catTable(base){
   if(!base.length)return '';
@@ -841,6 +886,7 @@ function delButton(edit){return edit?'<button class="btn btn-danger" type="butto
 function openDepense(rec){
   const edit=!!rec;
   const r=rec||{date:todayISO(),type:'',categorie:'',article:'',montant:'',payeA:'',note:''};
+  let proof='',removed=false;const hadProof=!!r.preuve;
   const types=L().types.map(t=>t.nom);if(r.type&&types.indexOf(r.type)<0)types.push(r.type);
   openSheet(sheetHead(edit?'Modifier la dépense':'Nouvelle dépense')+
     '<form id="fdep" novalidate>'+
@@ -852,6 +898,8 @@ function openDepense(rec){
     '<div class="field"><label for="d-paye">Payé à <span class="opt">(facultatif)</span></label><input class="inp" id="d-paye" maxlength="80" placeholder="Nom de la personne ou du fournisseur" value="'+esc(r.payeA||'')+'"></div>'+
     '<div class="field"><label for="d-date">Date</label><input class="inp" type="date" id="d-date" value="'+esc(r.date||todayISO())+'"></div>'+
     '<div class="field"><label for="d-note">Note <span class="opt">(facultatif)</span></label><input class="inp" id="d-note" maxlength="140" value="'+esc(r.note||'')+'"></div>'+
+    '<div class="field"><span class="lab">Preuve d’achat <span class="opt">(photo du reçu, facultatif)</span></span><div id="d-proof"></div>'+
+    '<input type="file" id="d-file" accept="image/*" hidden></div>'+
     '<p class="err" id="ferr" role="alert" hidden></p>'+
     '<div class="actions"><button class="btn btn-out" type="submit" id="fsave">Enregistrer</button><button class="btn btn-quiet" type="button" data-act="close">Annuler</button>'+delButton(edit)+'</div></form>');
 
@@ -883,6 +931,26 @@ function openDepense(rec){
     else if(e.target===artS)toggles();
   });
   wirePreview('d-montant','d-prev');
+  const pBox=$('#d-proof'),pFile=$('#d-file');
+  function drawProof(){
+    const has=proof||(hadProof&&!removed);
+    pBox.innerHTML=has?'<div class="proof"><img id="d-pimg" alt="Photo du reçu"'+(proof?' src="'+proof+'"':'')+'><div class="pa"><span class="ok">Reçu joint</span>'+
+      '<button class="btn-sm" type="button" id="d-pchg">Changer la photo</button><button class="btn-sm danger" type="button" id="d-pdel">Retirer</button></div></div>':
+      '<button class="btn-proof" type="button" id="d-padd">'+ICON.cam+'Joindre la photo du reçu</button>';
+    const pick=()=>pFile.click();
+    if(has){
+      $('#d-pchg').addEventListener('click',pick);
+      $('#d-pdel').addEventListener('click',()=>{proof='';removed=true;drawProof();});
+      if(!proof)loadPreuve(rec).then(src=>{const i=$('#d-pimg');if(i)i.src=src;}).catch(()=>{});
+    }else $('#d-padd').addEventListener('click',pick);
+  }
+  pFile.addEventListener('change',async()=>{
+    const fl=pFile.files&&pFile.files[0];if(!fl)return;
+    pBox.innerHTML='<p class="rmeta">Préparation de la photo…</p>';
+    try{proof=await photoToData(fl);}catch(e){showErr('Cette photo ne peut pas être lue. Essayez une autre photo.');}
+    pFile.value='';drawProof();
+  });
+  drawProof();
 
   f.addEventListener('submit',async ev=>{
     ev.preventDefault();
@@ -904,11 +972,20 @@ function openDepense(rec){
     const now=new Date().toISOString();
     const data=edit?Object.assign({},stripId(rec),{modifieLe:now,modifiePar:myId||null}):{par:myId||null,creeLe:now};
     Object.assign(data,{date:date,type:type,categorie:cat,article:art,montant:montant,payeA:$('#d-paye').value.trim(),note:$('#d-note').value.trim()});
+    const id=edit?rec.id:newId();
     try{
+      if(proof){
+        $('#fsave').textContent='Envoi de la photo…';
+        await rpc('suivi_preuve_ecrire',{p_ligne:id,p_data:proof});
+        data.preuve=new Date().toISOString();
+      }else if(removed&&hadProof){
+        await rpc('suivi_preuve_supprimer',{p_ligne:id});
+        data.preuve='';
+      }
       if(catNew||artNew){ensureInListes(type,cat,art);}
-      await store.put('sorties',edit?rec.id:newId(),data);
+      await store.put('sorties',id,data);
       closeSheet();toast(edit?'Dépense modifiée.':'Dépense enregistrée.');
-    }catch(e){btn.disabled=false;showErr(failMsg(e));}
+    }catch(e){btn.disabled=false;btn.textContent='Enregistrer';showErr(failMsg(e));}
   });
   const dbtn=$('[data-act="sheet-del"]');
   if(dbtn)confirmDelete(dbtn,'sorties',rec.id,'Dépense supprimée.');
@@ -991,7 +1068,7 @@ async function exportExcel(){
   const E=sortRows(state.entrees),S=sortRows(state.sorties);
   const tin=sum(E),tout=sum(S);
   const entRows=E.map(r=>({'Date':toDate(r.date),'Montant (FCFA)':Number(r.montant)||0,'Mode d’envoi':r.mode||'','Envoyé par':r.de||'','Note':r.note||'','Saisi par':r.par||'','Saisi le':stamp(r.creeLe)}));
-  const depRows=S.map(r=>({'Date':toDate(r.date),'Type':r.type||'','Catégorie':r.categorie||'','Article / métier':r.article||'','Payé à':r.payeA||'','Montant (FCFA)':Number(r.montant)||0,'Note':r.note||'','Saisi par':r.par||'','Saisi le':stamp(r.creeLe)}));
+  const depRows=S.map(r=>({'Date':toDate(r.date),'Type':r.type||'','Catégorie':r.categorie||'','Article / métier':r.article||'','Payé à':r.payeA||'','Montant (FCFA)':Number(r.montant)||0,'Note':r.note||'','Reçu joint':r.preuve?'Oui':'Non','Saisi par':r.par||'','Saisi le':stamp(r.creeLe)}));
   try{
     if(!window.XLSX)throw new Error('xlsx');
     const X=window.XLSX;const wb=X.utils.book_new();
@@ -1007,7 +1084,7 @@ async function exportExcel(){
     const o={cellDates:true,dateNF:'dd/mm/yyyy'};
     const ws1=X.utils.json_to_sheet(entRows.length?entRows:[{'Date':'','Montant (FCFA)':''}],o);ws1['!cols']=[{wch:12},{wch:16},{wch:20},{wch:18},{wch:30},{wch:16},{wch:18}];
     X.utils.book_append_sheet(wb,ws1,'Entrées');
-    const ws2=X.utils.json_to_sheet(depRows.length?depRows:[{'Date':'','Montant (FCFA)':''}],o);ws2['!cols']=[{wch:12},{wch:18},{wch:20},{wch:22},{wch:22},{wch:16},{wch:30},{wch:16},{wch:18}];
+    const ws2=X.utils.json_to_sheet(depRows.length?depRows:[{'Date':'','Montant (FCFA)':''}],o);ws2['!cols']=[{wch:12},{wch:18},{wch:20},{wch:22},{wch:22},{wch:16},{wch:30},{wch:11},{wch:16},{wch:18}];
     X.utils.book_append_sheet(wb,ws2,'Dépenses');
     const buf=X.write(wb,{bookType:'xlsx',type:'array',cellDates:true});
     await dl.save({filename:'Suivi-travaux-'+todayISO()+'.xlsx',data:buf});
@@ -1044,6 +1121,7 @@ document.addEventListener('click',e=>{
     case 'edit-ent':{const r=state.entrees.find(x=>x.id===b.dataset.id);if(r)openEntree(r);break;}
     case 'budget':openBudget();break;
     case 'export':exportExcel();break;
+    case 'recu':{const r=state.sorties.find(x=>x.id===b.dataset.id);if(r)openRecu(r);break;}
     case 'nom':showGate('nom');break;
     case 'close':closeSheet();break;
     case 'more':ui.limit+=60;render();break;
