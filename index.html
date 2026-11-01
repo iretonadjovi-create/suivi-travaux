@@ -415,7 +415,7 @@ function subscribe(){
 function knownNames(){
   return [...new Set(state.entrees.concat(state.sorties).map(r=>r.par).filter(p=>typeof p==='string'&&p))].sort((a,b)=>a.localeCompare(b,'fr'));
 }
-function showGate(step,msg){
+function showGate(step,msg,pre){
   const g=$('#gate'),b=$('#gatebody');
   if(step==='config'){
     b.innerHTML='<h2>Site pas encore relié</h2><p>Le fichier config.js ne contient pas encore l’adresse et la clé Supabase. Suivez le guide d’installation.</p>';
@@ -439,7 +439,7 @@ function showGate(step,msg){
         if(!subscribed){subscribed=true;subscribe();}
       }catch(e){
         code='';btn.disabled=false;btn.textContent='Entrer';
-        if(e.code==='pas_de_code'){showGate('nouveau');return;}
+        if(e.code==='pas_de_code'){showGate('nouveau','',v);return;}
         err.textContent=e.code==='code_invalide'?'Ce code n’est pas le bon. Vérifiez et réessayez.':
           e.code==='trop_essais'?'Trop d’essais. Réessayez dans 15 minutes.':
           'Pas de connexion au fichier. Vérifiez internet et réessayez.';
@@ -454,7 +454,7 @@ function showGate(step,msg){
       (neuf?'Première visite : choisissez le code d’accès de la famille. Il sera demandé à tous.':'Le nouveau code sera demandé à tout le monde à la prochaine visite.')+
       ' Au moins 6 caractères. Majuscules et minuscules comptent pareil.</p>'+
       '<form id="gform" novalidate><div class="field"><label for="g-c1">'+(neuf?'Code d’accès':'Nouveau code')+'</label>'+
-      '<input class="inp" id="g-c1" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>'+
+      '<input class="inp" id="g-c1" autocomplete="new-password" autocapitalize="off" spellcheck="false" value="'+esc(pre||'')+'"></div>'+
       '<div class="field"><label for="g-c2">Le même code, encore une fois</label>'+
       '<input class="inp" id="g-c2" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>'+
       '<p class="err" id="gerr" role="alert" hidden></p>'+
@@ -482,7 +482,7 @@ function showGate(step,msg){
         err(e.code==='code_court'?'Le code doit avoir au moins 6 caractères.':'Pas de connexion au fichier. Vérifiez internet et réessayez.');
       }
     });
-    setTimeout(()=>{const i=$('#g-c1');if(i)i.focus();},30);
+    setTimeout(()=>{const i=$(pre?'#g-c2':'#g-c1');if(i)i.focus();},30);
   }else{
     const ns=knownNames().filter(n=>n!==myId);
     b.innerHTML='<h2>Qui êtes-vous ?</h2><p>Votre prénom sera noté à côté de chaque saisie.</p>'+
